@@ -14,4 +14,14 @@ public class NullEncryptionService implements EncryptionService {
     public String getRemoteFilename(File file, String plainSha1, String plainRelativePath) {
         return plainRelativePath;
     }
+
+    @Override
+    public String getFileIndexFilename() {
+        return null;
+    }
+
+    @Override
+    public File decryptFile(File file, String passphrase) {
+        return file;
+    }
 }

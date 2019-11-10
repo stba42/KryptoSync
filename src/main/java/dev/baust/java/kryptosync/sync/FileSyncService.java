@@ -9,6 +9,7 @@ import com.backblaze.b2.client.exceptions.B2Exception;
 import com.backblaze.b2.client.structures.B2FileVersion;
 import com.backblaze.b2.client.structures.B2UploadFileRequest;
 import com.backblaze.b2.client.structures.B2UploadListener;
+import dev.baust.java.kryptosync.encryption.EncryptedFileEntry;
 import dev.baust.java.kryptosync.encryption.EncryptionService;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -54,10 +55,11 @@ public class FileSyncService {
             String sha1 = calcSHA1(path.toFile());
             logger.debug(b2FileName);
             if (getUploadState(b2FileName, sha1) == UploadState.TO_UPLOAD) {
-                uploadFile(b2FileName, path.toFile(), sha1);
+                EncryptedFileEntry uploadedFile = uploadFile(b2FileName, path.toFile(), sha1);
+                updateIndex(uploadedFile);
             }
             i++;
-            if (i == 5) {
+            if (i == 6) {
                 break;
             }
         }
@@ -89,11 +91,10 @@ public class FileSyncService {
         }
     }
 
-    public B2FileVersion uploadFile(String fileName, File localFile, String localSha1) throws IOException, B2Exception {
+    public EncryptedFileEntry uploadFile(String fileName, File localFile, String localSha1) throws IOException, B2Exception {
         File file = encryptionService.encryptFile(localFile, localSha1);
         String remoteFilename = encryptionService.getRemoteFilename(localFile, localSha1, fileName);
         String sha1 = calcSHA1(file);
-        PrintWriter writer = new PrintWriter(System.out, true);
         final B2UploadListener uploadListener = (progress) -> {
             final double percent = (100. * (progress.getBytesSoFar() / (double) progress.getLength()));
             logger.debug(String.format("%s  progress(%3.2f, )", progress.getState(), percent, progress.toString()));
@@ -104,7 +105,12 @@ public class FileSyncService {
                 .setListener(uploadListener).build();
 
         B2FileVersion fileVersion = client.uploadLargeFile(request, executor);
-        return fileVersion;
+        EncryptedFileEntry encryptedFileEntry = new EncryptedFileEntry();
+        encryptedFileEntry.setEncryptedFilename(remoteFilename);
+        encryptedFileEntry.setEncryptedSha1(sha1);
+        encryptedFileEntry.setPlainFilename(fileName);
+        encryptedFileEntry.setPlainSha1(localSha1);
+        return encryptedFileEntry;
     }
 
     public String getRelativePath(String basePathString, Path path) {
@@ -142,6 +148,14 @@ public class FileSyncService {
             }
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private void updateIndex(EncryptedFileEntry encryptedFileEntry) {
+        if (StringUtils.isEmpty(encryptionService.getFileIndexFilename())) {
+            return;
+        } else {
+            // TODO implement
         }
     }
 }
